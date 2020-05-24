@@ -5,6 +5,7 @@ library(RColorBrewer)
 library(gplots)
 library(Rtsne)
 
+#The file used for RNAseq is in brca_tcga_pub2015 (1)/data_RNA_Seq_v2_expression_median.txt
 df = fread("/Users/tariqhicham/Documents/EPFL/Master/genomics and bioinformatics/Project/brca_tcga_pub2015 (1)/data_RNA_Seq_v2_expression_median.txt")
 df <- df[rowSums(df[,3:819])>0,] #remove genes that are not expressed in all the samples
 names(df)
@@ -23,7 +24,7 @@ metadf <- fread("/Users/tariqhicham/Documents/EPFL/Master/genomics and bioinform
 metadf <- metadf[order(metadf$SAMPLE_ID),] 
 
 
-#there is an issu in the metadf : TCGA-BH-A1ES patient has 2 sample_id and only one correspond to one gene_count (TCGA-BH-A1ES-06)
+#there is an issue in the metadf : TCGA-BH-A1ES patient has 2 sample_id and only one correspond to one gene_count (TCGA-BH-A1ES-06)
 #I am going to remove the element  TCGA-BH-A1ES-01 that is not in df
 metadf= subset(metadf, metadf$SAMPLE_ID != 'TCGA-BH-A1ES-01')
 
@@ -45,11 +46,11 @@ ILC_samples = metadf[type == "ILC"]$SAMPLE_ID
 #extract entrez Id from df
 ENTREZ_ID = df$Entrez_Gene_Id
 
-
+#Extract GID from the dataset
 GID <- df$Hugo_Symbol
 
 
-#Extract the genes lengths from 'gene_length.txt'
+#Extract the genes lengths from 'gene_length.txt', produced by gene_length.R
 gene_length <- fread('gene_length.txt')
 
 
@@ -77,13 +78,6 @@ ILC$samples$subtype <- subtype
 
 #filtering
 #Genes that are not expressed at all are already removed
-
-#keep.exprs <- filterByExpr(ILC)#,group = ILC$samples$type) #not sure if this was the right group + 14298 genes
-#ILC <- ILC[keep.exprs,, keep.lib.sizes=FALSE]
-
-
-
-#test
 
 L <- mean(ILC$samples$lib.size) * 1e-6
 M <- median(ILC$samples$lib.size) * 1e-6
@@ -124,12 +118,9 @@ for (i in 2:10){
 #Normalization method is trimmed mean of M-values (TMM).
 
 
-
-
 par(mfrow =c(1,2))
 #boxplot non-normalized
 boxplot(lcpm[,1:5],names =NULL)
-
 
 #Normalization
 ILC<- calcNormFactors(ILC, method = "TMM")
@@ -140,10 +131,11 @@ lcpm =cpm(ILC,log=TRUE)
 boxplot(lcpm[,1:5],names=NULL) #normalization does not really change the boxplot because the batch effect 
 #was not very strong (factor1)
 
-
 col.group <- ILC$samples$subtype
 levels(col.group) <-  brewer.pal(nlevels(col.group), "Set1")
 
+
+#Perform a MDS analysis (not useful in the analysis, as we also perform a t-SNE
 par(mfrow=(c(1,1)))
 plotMDS(lcpm, col=col.group,pch=1)
 title(main="Dimensionality reduction of ILC types")
@@ -166,7 +158,7 @@ contr.matrix <- makeContrasts(
   levels = colnames(design))
 contr.matrix
 
-
+#Voom : Linear fitting and empirical Bayes moderation 
 par(mfrow=c(1,2))
 v <- voom(ILC, design, plot=TRUE)
 vfit <- lmFit(v, design)
@@ -174,26 +166,28 @@ vfit <- contrasts.fit(vfit, contrasts=contr.matrix)
 efit <- eBayes(vfit)
 plotSA(efit)
 
+#Determine the significant DEGs, meaning those that have a log2-FC > 1 (2-fold expression in one of the subtype
 summary(decideTests(efit))
 tfit <- treat(vfit, lfc=1)
 dt <- decideTests(tfit)
 summary(dt)
 
-
+#Plot significantly DEGs from each subtypes comparison
 par(mfrow=c(2,2))
 plotMD(tfit, column=1, status=dt[,1], main=colnames(tfit)[1], xlim=c(-8,13))
 plotMD(tfit, column=2, status=dt[,2], main=colnames(tfit)[2], xlim=c(-8,13))
 plotMD(tfit, column=3, status=dt[,3], main=colnames(tfit)[3], xlim=c(-8,13))
 
 
+#return the DEGs, with their log-FC, t-test and adj p-value
 Immune_vs_proliferative = topTreat(tfit,coef = 1,n=Inf,p.value = 0.05)
-top100.I_P = Immune_vs_proliferative[1:100,]
+top100.I_P = Immune_vs_proliferative[1:100,]#Not useful
 Immune_vs_Reactive = topTreat(tfit,coef = 2,n=Inf,p.value = 0.05)
-top100.I_R = Immune_vs_Reactive[1:100,]
+top100.I_R = Immune_vs_Reactive[1:100,]#Not useful
 Proliferative_vs_Reactive = topTreat(tfit,coef = 3,n=Inf,p.value = 0.05)
-top100.I_R = Immune_vs_Reactive[1:100,]
+top100.I_R = Immune_vs_Reactive[1:100,]#Not useful
 
-
+#Select the 20 top DEGs to compute the clustering
 Immune_vs_proliferative_topgenes <- Immune_vs_proliferative$ENTREZ_ID[1:20]
 Immune_vs_Reactive_topgenes <- Immune_vs_Reactive$ENTREZ_ID[1:20]
 Proliferative_vs_Reactive_topgenes_ID <- Proliferative_vs_Reactive$ENTREZ_ID[1:20]
@@ -227,10 +221,6 @@ legend('right',legend = c("Reactive-Like","Immune-Related","Proliferative"), fil
 
 
 #with DE genes found
-
-
-
-
 lcpm <- cpm(ILC,log =TRUE)
 heatmap.2(lcpm[i,], scale="row",
           labRow=v$genes$GID[i],labCol =FALSE ,
@@ -241,13 +231,13 @@ heatmap.2(lcpm[i,], scale="row",
 legend('right',legend = c("Reactive-Like","Immune-Related","Proliferative"), fill =c('#7570B3',"#1B9E77","#D95F02"),
        cex=.7,title ="ILC subtypes")
 
-###########################
-# T-SNE for ILC subtypes  #
-##########################
 
+          
+          
+          
+# T-SNE for ILC subtypes  #
 colors = rainbow(length(unique(ILC$samples$subtype)))
 names(colors) = unique(ILC$samples$subtype)
-
 tSNE_subtype=Rtsne(t(lcpm[i,]), dims = 2,perplexity = 10, verbose=TRUE)
 plot(tSNE_subtype$Y,col=colors[ILC$samples$subtype],main ="t-SNE projection for ILC subtypes", xlab ="t-SNE dimension 1",ylab = "t-SNE dimension 2")
 legend("topright",c('Reactive-like',"Immune-related","Proliferative"),col = colors,pch=1,cex=1)
