@@ -4,6 +4,7 @@ library(dplyr)
 library(RColorBrewer)
 library(gplots)
 library(Rtsne)
+library(data.table)
 
 #The file used for RNAseq is in brca_tcga_pub2015 (1)/data_RNA_Seq_v2_expression_median.txt
 df = fread("/Users/tariqhicham/Documents/EPFL/Master/genomics and bioinformatics/Project/brca_tcga_pub2015 (1)/data_RNA_Seq_v2_expression_median.txt")
